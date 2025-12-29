@@ -1,0 +1,17 @@
+Flask
+flasgger
+gunicorn
+geopandas
+networkx
+city2graph
+torch
+torch_geometric
+scikit-learn
+folium
+geopy
+pandas
+numpy
+shapely
+joblib
+openpyxl
+scipy
