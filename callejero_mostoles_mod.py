@@ -78,8 +78,18 @@ for idx, row in gdf_edges.iterrows():
     geom = row.geometry
     speed_kph = speed_for_row(row)
     zona = row['zona']
-    oneway = row['oneway_norm']
     
+    # 1. Analizar dirección
+    raw_oneway = row.get('oneway')
+    raw_junction = str(row.get('junction', '')).lower()
+    
+    # LÓGICA CORREGIDA:
+    # Si es rotonda, SIEMPRE es oneway (OpenStreetMap dibuja las rotondas en dirección del tráfico)
+    if 'roundabout' in raw_junction:
+        oneway = 'yes'
+    else:
+        oneway = interpret_oneway(raw_oneway)
+
     # Manejar MultiLineStrings si las hubiera
     lines = [geom] if geom.geom_type == 'LineString' else list(geom.geoms)
 
