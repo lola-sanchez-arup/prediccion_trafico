@@ -84,7 +84,7 @@ for idx, row in gdf_edges.iterrows():
     raw_junction = str(row.get('junction', '')).lower()
     
     # LÓGICA CORREGIDA:
-    # Si es rotonda, SIEMPRE es oneway (OpenStreetMap dibuja las rotondas en dirección del tráfico)
+    # Si es rotonda, SIEMPRE es oneway 
     if 'roundabout' in raw_junction:
         oneway = 'yes'
     else:
