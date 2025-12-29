@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Móstoles Traffic & Emergency Command</title>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.104/Build/Cesium/Cesium.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.104/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<style>
+    /* -------------------------------------------
+       ESTILOS "COMMAND CENTER"
+       ------------------------------------------- */
+    html, body, #cesiumContainer { width: 100%; height: 100%; margin:0; padding:0; overflow:hidden; }
+    #cesiumContainer { position:absolute; top:0; left:0; right:0; bottom:0; }
+    
+    /* Panel Flotante */
+    #controlsPanel {
+        position:absolute; top:15px; left:15px; width:340px; z-index:1000;
+        background: rgba(18, 18, 24, 0.95); color: #e5e7eb; padding:20px; 
+        border-radius:12px; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        border: 1px solid rgba(255,255,255,0.1);
+        backdrop-filter: blur(10px); box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        max-height: 90vh; overflow-y: auto;
+    }
+    
+    h3 { margin:0 0 15px 0; font-weight: 700; font-size: 1.1em; letter-spacing: 0.5px; color: #60a5fa; text-transform: uppercase; border-bottom: 2px solid #374151; padding-bottom: 10px; }
+    h4 { margin: 20px 0 10px 0; font-size: 0.9em; text-transform: uppercase; color: #9ca3af; border-bottom: 1px solid #374151; padding-bottom: 5px; }
+    
+    .control-group { margin-bottom: 15px; }
+    label { display: block; margin-bottom: 6px; font-size: 0.85em; color: #d1d5db; font-weight: 500; }
+    
+    input[type="date"] {
+        width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #4b5563;
+        background: #1f2937; color: white; outline: none; transition: border 0.3s;
+        box-sizing: border-box; font-family: inherit;
+    }
+    input[type="date"]:focus { border-color: #3b82f6; }
+    
+    /* BOTONES */
+    button {
+        width: 100%; padding: 12px; border: none; border-radius: 6px; cursor: pointer;
+        font-weight: 600; margin-bottom: 8px; transition: all 0.2s; display: flex;
+        align-items: center; justify-content: center; gap: 10px; font-size: 0.9em;
+    }
+    
+    .btn-visualize { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; }
+    .btn-visualize:hover { box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4); transform: translateY(-1px); }
+
+    /* Botón Emergencia */
+    .btn-fire-mode { background: #374151; color: white; border: 1px solid #4b5563; }
+    .btn-fire-mode:hover { background: #4b5563; }
+    .btn-fire-mode.active { background: #ef4444; color: white; border-color: #ef4444; animation: pulse 2s infinite; }
+
+    /* Botón Enviar Unidad (Dispatcher) */
+    .btn-dispatch { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); color: white; opacity: 0.5; pointer-events: none; }
+    .btn-dispatch.ready { opacity: 1; pointer-events: auto; cursor: pointer; }
+    .btn-dispatch.active { background: #ea580c; border: 2px solid #fcd34d; animation: pulse-yellow 2s infinite; }
+
+    .btn-secondary { background: #1f2937; color: #93c5fd; border: 1px solid #3b82f6; }
+    .btn-secondary:hover { background: #1e3a8a; color: white; }
+
+    .btn-clear { background: transparent; border: 1px dashed #6b7280; color: #9ca3af; margin-top: 10px; font-size: 0.8em; }
+    .btn-clear:hover { background: rgba(255,255,255,0.05); color: #e5e7eb; border-color: #9ca3af; }
+
+    @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    @keyframes pulse-yellow { 0% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(251, 191, 36, 0); } 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0); } }
+
+    .status-badge {
+        display: inline-block; padding: 6px 10px; border-radius: 6px; font-size: 0.75em; font-weight: 700; text-transform: uppercase;
+        background: #1f2937; color: #9ca3af; margin-bottom: 15px; width: 100%; text-align: center; box-sizing: border-box; letter-spacing: 1px;
+    }
+    .status-badge.active-fire { background: #7f1d1d; color: #fca5a5; border: 1px solid #ef4444; }
+    .status-badge.active-truck { background: #713f12; color: #fcd34d; border: 1px solid #f59e0b; }
+
+    .legend { display: flex; justify-content: space-between; margin-top: 5px; font-size: 0.75em; color: #ccc; }
+    .gradient-bar { height: 6px; width: 100%; border-radius: 3px; margin: 5px 0; background: linear-gradient(90deg, #3B82F6 0%, #FBBF24 50%, #EF4444 100%); }
+
+    #truckList { margin-top: 15px; max-height: 200px; overflow-y: auto; }
+    .truck-card { 
+        background: #374151; padding: 10px; margin-bottom: 8px; border-radius: 6px; font-size: 0.85em; 
+        border-left: 4px solid #aaa; display: flex; justify-content: space-between; align-items: center;
+    }
+    .truck-card button { width: auto; padding: 2px 6px; margin: 0; font-size: 10px; background: transparent; color: #ef4444; border: 1px solid #ef4444; }
+    .truck-card button:hover { background: #ef4444; color: white; }
+    
+    #loading { display: none; text-align: center; color: #fbbf24; margin: 10px 0; font-size: 0.9em; font-weight: bold; }
+</style>
+</head>
+<body>
+
+<div id="controlsPanel">
+    <h3>PANEL DE CONTROL</h3>
+    <div id="simulationStatus" class="status-badge">Simulación Inactiva</div>
+    
+    <div class="control-group">
+        <label>Fecha de Análisis:</label>
+        <input type="date" id="simulationDate">
+    </div>
+
+    <button class="btn-visualize" onclick="visualizeTraffic()">
+        <span>🚦</span> Predicción de Tráfico
+    </button>
+    <div id="loading">⏳ Procesando...</div>
+    
+    <div style="margin-top:5px; margin-bottom: 20px;">
+        <div class="legend"><span>Fluido</span><span>Moderado</span><span>Congestionado</span></div>
+        <div class="gradient-bar"></div>
+    </div>
+
+    <h4>🚨 Gestión de Emergencias</h4>
+    
+    <button id="btnFireMode" class="btn-fire-mode" onclick="toggleFireMode()">
+        🔥 Definir Emergencia
+    </button>
+    
+    <button id="btnDispatch" class="btn-dispatch" onclick="toggleDispatchMode()">
+        🚒 Añadir Unidad (Clic Mapa)
+    </button>
+    
+    <button id="toggleBomberosBtn" class="btn-secondary" onclick="toggleFireStation()">
+        📍 Parque de Bomberos
+    </button>
+
+    <button class="btn-clear" onclick="clearSimulation()">
+        🗑️ Limpiar Simulación
+    </button>
+
+    <div id="truckList"></div>
+</div>
+
+<div id="cesiumContainer"></div>
+
+<script>
+    Cesium.Ion.defaultAccessToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI0ZjFlMTE3MC1mYTQwLTRjZmEtYTgwNC0zMzAwMzcyMjc2MGUiLCJpZCI6MzYyNTk2LCJpYXQiOjE3NjQzMzY5MTB9.GOInP_22DTairKii2Bx1A_HrTM-ccMdaqlwEzk-Vnhc";
+
+    const viewer = new Cesium.Viewer('cesiumContainer', {
+        terrainProvider: undefined,
+        baseLayerPicker: false,
+        animation: false,
+        timeline: false,
+        sceneModePicker: false,
+        selectionIndicator: false,
+        infoBox: false,
+        homeButton: false,
+        geocoder: false
+    });
+
+    viewer.scene.globe.baseColor = Cesium.Color.fromCssColorString('#111827');
+    viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#111827');
+
+    viewer.camera.flyTo({
+        destination: Cesium.Cartesian3.fromDegrees(-3.8649, 40.3232, 7500),
+        duration: 0
+    });
+
+    document.getElementById('simulationDate').valueAsDate = new Date();
+
+    // -----------------------------------------------------------------
+    // PARQUE DE BOMBEROS (Visual de Referencia)
+    // -----------------------------------------------------------------
+    const FIRE_STATION_POS = { lat: 40.322028417450156, lon: -3.8576071399165 };
+    
+    let bomberosEntity = viewer.entities.add({
+        id: 'parque-bomberos',
+        position: Cesium.Cartesian3.fromDegrees(FIRE_STATION_POS.lon, FIRE_STATION_POS.lat),
+        billboard: {
+            image: 'https://cdn-icons-png.flaticon.com/512/2991/2991107.png', 
+            width: 40, height: 40, verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+        },
+        label: {
+            text: "PARQUE BOMBEROS", font: "12px sans-serif", style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            outlineWidth: 2, verticalOrigin: Cesium.VerticalOrigin.TOP, pixelOffset: new Cesium.Cartesian2(0, 5), fillColor: Cesium.Color.WHITE
+        },
+        show: false
+    });
+
+    function toggleFireStation() {
+        bomberosEntity.show = !bomberosEntity.show;
+        const btn = document.getElementById("toggleBomberosBtn");
+        if (bomberosEntity.show) {
+            btn.style.background = "#1e3a8a"; btn.style.color = "white";
+        } else {
+            btn.style.background = "#1f2937"; btn.style.color = "#93c5fd";
+        }
+    }
+
+    // -----------------------------------------------------------------
+    // TRÁFICO (Visualización)
+    // -----------------------------------------------------------------
+    let streetDataSource = null;
+    const TRAFFIC_COLORS = {
+        free: Cesium.Color.fromCssColorString('#3B82F6'),
+        moderate: Cesium.Color.fromCssColorString('#FBBF24'),
+        congested: Cesium.Color.fromCssColorString('#EF4444'),
+        unknown: Cesium.Color.fromCssColorString('#374151')
+    };
+
+    function getTrafficColor(level) {
+        level = Math.max(0, Math.min(1, level));
+        if (level < 0.35) return Cesium.Color.lerp(TRAFFIC_COLORS.free, TRAFFIC_COLORS.moderate, level/0.35, new Cesium.Color());
+        else if (level < 0.65) return Cesium.Color.lerp(TRAFFIC_COLORS.moderate, TRAFFIC_COLORS.moderate, (level-0.35)/0.30, new Cesium.Color());
+        else return Cesium.Color.lerp(TRAFFIC_COLORS.moderate, TRAFFIC_COLORS.congested, (level-0.65)/0.35, new Cesium.Color());
+    }
+
+    async function loadStreetNetwork() {
+        try {
+            streetDataSource = await Cesium.GeoJsonDataSource.load('/callejero_full', {
+                stroke: TRAFFIC_COLORS.unknown, strokeWidth: 2, clampToGround: true
+            });
+            await viewer.dataSources.add(streetDataSource);
+        } catch (e) { console.error("Error mapa:", e); }
+    }
+    loadStreetNetwork();
+
+    async function visualizeTraffic() {
+        const dateStr = document.getElementById('simulationDate').value;
+        const loading = document.getElementById('loading');
+        loading.style.display = 'block';
+        try {
+            const res = await fetch(`/prediccion_trafico?date=${dateStr}`);
+            const data = await res.json();
+            if (streetDataSource) {
+                const entities = streetDataSource.entities.values;
+                for (let i = 0; i < entities.length; i++) {
+                    const ent = entities[i];
+                    let zona = ent.properties?.zona?.getValue() || "Desconocida";
+                    zona = zona.trim();
+                    let base = data[zona] !== undefined ? data[zona] : 0;
+                    // Variación visual pequeña para que no sea plano
+                    let val = base * 0.5 + (Math.random() - 0.5) * 0.3;
+                    ent.polyline.material = getTrafficColor(val);
+                    ent.polyline.width = val > 0.7 ? 4 : 2;
+                }
+            }
+        } catch(e) { console.error(e); }
+        finally { loading.style.display = 'none'; }
+    }
+
+    // -----------------------------------------------------------------
+    // LÓGICA DE SIMULACIÓN (ESTILO ORIGINAL RESTAURADO)
+    // -----------------------------------------------------------------
+    
+    // Variables de Estado
+    let isFireMode = false;
+    let isDispatchMode = false; 
+    let fireLocation = null;
+    let fireEntity = null;
+    
+    let truckCounter = 0;
+    let truckEntities = []; // Para limpiar después
+    
+    // Colores para rutas
+    const ROUTE_COLORS = [
+        Cesium.Color.CYAN, Cesium.Color.MAGENTA, Cesium.Color.LIME, 
+        Cesium.Color.ORANGE, Cesium.Color.YELLOW, Cesium.Color.HOTPINK
+    ];
+    let routeColorIndex = 0;
+
+    // --- 1. Definir Emergencia (Fuego) ---
+    function toggleFireMode() {
+        // Si estamos añadiendo camiones, desactivarlo primero
+        if(isDispatchMode) {
+            isDispatchMode = false;
+            document.getElementById('btnDispatch').classList.remove('active');
+            document.getElementById('btnDispatch').innerHTML = "🚒 Añadir Unidad (Clic Mapa)";
+        }
+
+        isFireMode = !isFireMode;
+        const btn = document.getElementById('btnFireMode');
+        const badge = document.getElementById('simulationStatus');
+        
+        if (isFireMode) {
+            btn.classList.add('active');
+            btn.innerHTML = "❌ Cancelar Ubicación";
+            badge.innerText = "Haz CLIC en el mapa para definir el FUEGO";
+            badge.className = "status-badge active-fire";
+            viewer.canvas.style.cursor = "crosshair";
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = "🔥 Definir Emergencia";
+            updateStatusBadge();
+            viewer.canvas.style.cursor = "default";
+        }
+    }
+
+    // --- 2. Activar Modo Despliegue (Preparar Cursor) ---
+    function toggleDispatchMode() {
+        if(!fireLocation) {
+            alert("⚠️ ¡Primero debes definir una emergencia en el mapa!");
+            return;
+        }
+        
+        // Si estábamos en modo fuego, salir
+        if(isFireMode) toggleFireMode();
+
+        isDispatchMode = !isDispatchMode;
+        const btn = document.getElementById('btnDispatch');
+        const badge = document.getElementById('simulationStatus');
+
+        if(isDispatchMode) {
+            btn.classList.add('active');
+            btn.innerHTML = "📍 Haga clic para situar camión";
+            badge.innerText = "Haga CLIC en cualquier punto para añadir una unidad";
+            badge.className = "status-badge active-truck";
+            viewer.canvas.style.cursor = "crosshair";
+        } else {
+            btn.classList.remove('active');
+            btn.innerHTML = "🚒 Añadir Unidad (Clic Mapa)";
+            updateStatusBadge();
+            viewer.canvas.style.cursor = "default";
+        }
+    }
+
+    function updateStatusBadge() {
+        const badge = document.getElementById('simulationStatus');
+        if(fireLocation) {
+            badge.innerText = "EMERGENCIA ACTIVA - Esperando unidades";
+            badge.className = "status-badge active-fire";
+        } else {
+            badge.innerText = "Simulación Inactiva";
+            badge.className = "status-badge";
+        }
+    }
+
+    // --- MANEJADOR DE CLICS ---
+    const handler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
+    
+    handler.setInputAction((click) => {
+        const cartesian = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+        if (!cartesian) return;
+        
+        const c = Cesium.Cartographic.fromCartesian(cartesian);
+        const clickLat = Cesium.Math.toDegrees(c.latitude);
+        const clickLon = Cesium.Math.toDegrees(c.longitude);
+
+        // A) Poner Fuego
+        if (isFireMode) {
+            fireLocation = { lon: clickLon, lat: clickLat };
+            
+            // Dibujar fuego
+            if (fireEntity) viewer.entities.remove(fireEntity);
+            fireEntity = viewer.entities.add({
+                position: cartesian,
+                billboard: {
+                    image: 'https://cdn-icons-png.flaticon.com/512/785/785116.png',
+                    width: 32, height: 32, verticalOrigin: Cesium.VerticalOrigin.BOTTOM
+                },
+                point: { pixelSize: 20, color: Cesium.Color.RED.withAlpha(0.3), outlineWidth:0 }
+            });
+
+            document.getElementById('btnDispatch').classList.add('ready');
+            toggleFireMode(); 
+        }
+        
+        // B) Añadir Camión
+        else if (isDispatchMode) {
+            spawnTruckAtLocation(clickLat, clickLon);
+        }
+
+    }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+
+    // --- FUNCIÓN: Generar Camión y Ruta ---
+    function spawnTruckAtLocation(origLat, origLon) {
+        const dateStr = document.getElementById('simulationDate').value;
+        const currentId = ++truckCounter;
+        const routeColor = ROUTE_COLORS[routeColorIndex % ROUTE_COLORS.length];
+        routeColorIndex++;
+
+        // 1. Dibujar el camión usando EMOJI 
+        const truckEnt = viewer.entities.add({
+            position: Cesium.Cartesian3.fromDegrees(origLon, origLat),
+            label: {
+                text: '🚒', 
+                font: '32px sans-serif',
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+            }
+        });
+        truckEntities.push(truckEnt);
+
+        // 2. Pedir ruta: ORIGEN -> DESTINO
+        const url = `/ruta?orig_lat=${origLat}&orig_lon=${origLon}&dest_lat=${fireLocation.lat}&dest_lon=${fireLocation.lon}&date=${dateStr}`;
+
+        fetch(url)
+            .then(r => r.json())
+            .then(geojson => {
+                if(geojson.error) {
+                    alert("No se pudo calcular la ruta: " + geojson.error);
+                    viewer.entities.remove(truckEnt);
+                    return;
+                }
+                
+                // 3. Dibujar la línea de ruta 
+                const coords = geojson.features[0].geometry.coordinates;
+                const props = geojson.features[0].properties;
+                const positions = coords.map(c => Cesium.Cartesian3.fromDegrees(c[0], c[1]));
+
+                const routeEnt = viewer.entities.add({
+                    polyline: {
+                        positions: positions,
+                        width: 10, 
+                        zIndex: 5, // Forzar que se pinte encima de las calles 
+                        material: new Cesium.PolylineGlowMaterialProperty({
+                            glowPower: 0.2,
+                            color: routeColor
+                        }),
+                        clampToGround: true
+                    }
+                });
+                truckEntities.push(routeEnt);
+
+                // 4. Añadir tarjeta a la lista (SOLO TIEMPO Y DISTANCIA)
+                addTruckCard(currentId, props, routeColor);
+            })
+            .catch(err => {
+                console.error(err);
+                alert("Error de conexión con el servidor de rutas.");
+                viewer.entities.remove(truckEnt);
+            });
+    }
+
+    function addTruckCard(id, props, colorObj) {
+        const div = document.getElementById('truckList');
+        const cssColor = colorObj.toCssColorString();
+        
+        // Tarjeta simplificada: Solo Km y Minutos
+        const html = `
+            <div class="truck-card" id="card-truck-${id}" style="border-left-color: ${cssColor}">
+                <div>
+                    <strong style="color:${cssColor}">Unidad #${id}</strong>
+                </div>
+                <div style="text-align:right">
+                    <div style="font-size:1.1em; font-weight:bold; color:white;">${(props.time_s/60).toFixed(1)} min</div>
+                    <small style="color:#9ca3af">${(props.length_m/1000).toFixed(2)} km</small>
+                </div>
+            </div>`;
+        
+        div.insertAdjacentHTML('afterbegin', html);
+    }
+
+    function clearSimulation() {
+        truckEntities.forEach(e => viewer.entities.remove(e));
+        truckEntities = [];
+        
+        if(fireEntity) viewer.entities.remove(fireEntity);
+        fireEntity = null;
+        fireLocation = null;
+        
+        truckCounter = 0;
+        routeColorIndex = 0;
+        document.getElementById('truckList').innerHTML = "";
+        
+        isFireMode = false; 
+        isDispatchMode = false;
+        
+        document.getElementById('btnFireMode').classList.remove('active');
+        document.getElementById('btnFireMode').innerHTML = "🔥 Definir Emergencia";
+        
+        document.getElementById('btnDispatch').classList.remove('active');
+        document.getElementById('btnDispatch').classList.remove('ready');
+        document.getElementById('btnDispatch').innerHTML = "🚒 Añadir Unidad (Clic Mapa)";
+        
+        viewer.canvas.style.cursor = "default";
+        updateStatusBadge();
+    }
+</script>
+</body>
+</html>
